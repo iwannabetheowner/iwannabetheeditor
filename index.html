@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Level Editor</title>
+  <link rel="icon" type="image/x-icon" href="https://pbs.twimg.com/media/G7v2yQGaMAAtp6K?format=jpg&name=medium">
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #000;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    #editor {
+      max-width: 750px;
+      width: 100%;
+      padding: 20px;
+      background-color: #222;
+      border-radius: 8px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.8);
+      text-align: center;
+      box-sizing: border-box;
+    }
+    fieldset {
+      border: 1px solid #888;
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #333;
+    }
+    legend { font-weight: bold; }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(32,20px);
+      grid-template-rows: repeat(16,20px);
+      gap: 1px;
+      margin: 0 auto;
+      background: #555;
+      user-select: none;
+      width: calc(32*20px + 31px);
+      height: calc(16*20px + 15px);
+    }
+    .cell { width: 20px; height: 20px; background: #000; cursor: crosshair; }
+    #output { width:90%; height:200px; margin-top:10px; background-color:#333; color:#fff; border:1px solid #444; padding:10px; font-family: monospace; overflow:auto; }
+    button, input[type="file"], input[type="text"] { margin: 5px; }
+  </style>
+</head>
+<body>
+<div id="editor">
+  <h2>IWBTC Level Editor</h2>
+  <fieldset>
+    <legend>Colors (Editable Anytime)</legend>
+    <label>Background: <input type="color" id="color0" value="#aaaaff"></label>
+    <label>Solid 1: <input type="color" id="color1" value="#666666"></label>
+    <label>Solid 2: <input type="color" id="color2" value="#999999"></label>
+    <label>Hazard: <input type="color" id="color3" value="#ff0000"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Level Manager</legend>
+    <input type="file" id="levelFile" accept=".txt,.json"><br>
+    <button onclick="loadLevelFromFile()">Load level</button>
+  </fieldset>
+  <fieldset>
+    <legend>Tools</legend>
+    <div>
+      <button onclick="setTool(0)">Background</button>
+      <button onclick="setTool(1)">Solid 1</button>
+      <button onclick="setTool(2)">Solid 2</button>
+      <button onclick="setTool(3)">Hazard</button>
+      <button onclick="setTool(4)">Water</button>
+      <button onclick="setTool('sp')">Set Start</button>
+      <button onclick="setTool('ep')">Set End</button>
+      <button onclick="exportLevel()">Export</button>
+      <button onclick="downloadLevel()">Download</button>
+      <textarea id="importText" placeholder="Paste level text here..." style="width:90%; height:120px; margin-top:10px;"></textarea>
+      <button onclick="importLevel()">Import</button>
+    </div>
+  </fieldset>
+  <div id="grid"></div>
+  <textarea id="output" readonly></textarea>
+</div>
+<script>
+let levelFiles = [];
+const rows=16, cols=32;
+let tool=1;
+let startPos=null, endPos=null;
+let isMouseDown=false;
+const grid = document.getElementById('grid');
+const cells = [];
+function aq(hex) {
+  return "#" + [Math.min(200, Math.max(100, Math.round(127.5 - 2040 / (parseInt(hex.slice(1, 3), 16) - 127.5)))),
+  Math.min(200, Math.max(100, Math.round(127.5 - 2040 / (parseInt(hex.slice(3, 5), 16)) - 127.5))),
+  255].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+let colors = [
+  document.getElementById('color0').value,
+  document.getElementById('color1').value,
+  document.getElementById('color2').value,
+  document.getElementById('color3').value,
+];
+let wcol = aq(colors[0])
+for (let y=0; y<rows; y++){
+  const row=[];
+  for (let x=0; x<cols; x++){
+    const cell=document.createElement('div');
+    cell.className='cell';
+    cell.dataset.value=0;
+    cell.style.background=colors[0];
+    cell.addEventListener('mousedown',()=>{ isMouseDown=true; paintCell(x,y,cell); });
+    cell.addEventListener('mouseenter',()=>{ if(isMouseDown) paintCell(x,y,cell); });
+    grid.appendChild(cell);
+    row.push(cell);
+  }
+  cells.push(row);
+}
+document.body.addEventListener('mouseup',()=>isMouseDown=false);
+function setTool(t){ tool=t; }
+function paintCell(x,y,cell){
+  if(tool==='sp'){
+    if(startPos) cells[startPos[1]][startPos[0]].style.outline='none';
+    startPos=[x,y];
+    cell.style.outline='2px solid #0f0';
+    return;
+  }
+  if(tool==='ep'){
+    if(endPos) cells[endPos[1]][endPos[0]].style.outline='none';
+    endPos=[x,y];
+    cell.style.outline='2px solid #f00';
+    return;
+  }
+  if(tool===4){
+    cell.dataset.value=4;
+    cell.style.background=wcol;
+  }
+  cell.dataset.value=tool;
+  cell.style.background=colors[tool];
+}
+for(let i=0;i<4;i++){
+  document.getElementById('color'+i).addEventListener('input',()=>{
+    colors[i]=document.getElementById('color'+i).value;
+    if(i===0) wcol = aq(colors[0]);
+    updateGridColors(i);
+  });
+}
+function updateGridColors(idx){
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      const val=parseInt(cells[y][x].dataset.value);
+      if(val===idx) cells[y][x].style.background=colors[val];
+      if(val===4 && idx===0) cells[y][x].style.background=wcol;
+    }
+  }
+}
+function exportLevel(){
+  const levelData = cells.map(r=>`"${r.map(c=>c.dataset.value).join('')}"`).join(',\n  ');
+  const colsRGB = colors.map(hex=>`(${parseInt(hex.substr(1,2),16)},${parseInt(hex.substr(3,2),16)},${parseInt(hex.substr(5,2),16)})`).join(', ');
+  const result = `{'level':[\n  ${levelData}],\n  'sp':[${startPos?startPos[0]:0},${startPos?startPos[1]:0}],\n  'ep':[${endPos?endPos[0]:0},${endPos?endPos[1]:0}],\n  'cols':[${colsRGB}]}`;
+  document.getElementById('output').value=result;
+}
+function loadLevel(data){
+  if (!data.level || !data.cols) {
+    alert('Invalid level data.');
+    return;
+  }
+  colors = data.cols.map(([r,g,b])=>"#"+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''));
+  for(let i=0;i<4;i++) document.getElementById('color'+i).value=colors[i];
+  wcol = aq(colors[0])
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      const val=parseInt(data.level[y][x])||0;
+      const cell=cells[y][x];
+      cell.dataset.value=val;
+      if(val===4){cell.style.background=wcol}else{cell.style.background=colors[val]};
+      cell.style.outline='none';
+    }
+  }
+  startPos=data.sp||null;
+  endPos=data.ep||null;
+  if(startPos) cells[startPos[1]][startPos[0]].style.outline='2px solid #0f0';
+  if(endPos) cells[endPos[1]][endPos[0]].style.outline='2px solid #f00';
+}
+function loadLevelFromFile() {
+  const fileInput = document.getElementById('levelFile');
+  const file = fileInput.files[0]; // Only one file will be selected
+  
+  if (!file) {
+    alert("Please select a level file.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    let text = e.target.result.replace(/'/g, '"').replace(/\((.*?)\)/g, '[$1]');
+    try {
+      const data = JSON.parse(text);
+      loadLevel(data);
+    } catch (err) {
+      alert("Error while loading level. See console.");
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+function importLevel(){
+  let text=document.getElementById('importText').value.trim();
+  if(!text){ alert("Put level data in the textbox."); return; }
+  try{
+    text=text.replace(/\r?\n|\r/g,"").replace(/'/g,'"').replace(/\((.*?)\)/g,'[$1]').replace(/,(\s*[}\]])/g,'$1');
+    const data=JSON.parse(text);
+    loadLevel(data);
+    console.log("Successfully loaded level from text");
+  }catch(err){ alert("Error while loading level. See console."); console.error(err); }
+}
+function downloadLevel(){
+  exportLevel();
+  const text=document.getElementById('output').value;
+  const levelName=document.getElementById('levelName').value || 'level';
+  const blob=new Blob([text],{type:"text/plain"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=levelName+".txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
